@@ -8,7 +8,7 @@ happened**, so next cycle starts from evidence instead of memory.
 
 | Plugin | What it does | Version |
 |---|---|---|
-| [`gruntwork-meals`](plugins/gruntwork-meals) | Plan the week's meals, build the shopping lists, cook, and log reality | 0.4.0 |
+| [`gruntwork-meals`](plugins/gruntwork-meals) | Plan the week's meals, build the shopping lists, cook, and log reality | 0.4.1 |
 
 ---
 
@@ -26,10 +26,13 @@ household without handing over yours.
 
 ```
 this repo (public)                 your state store (private, yours)
-├── the skill                      ├── config.yaml   household, cadence, goals
-└── no household data              ├── meals.csv     the meal library
-                                   └── log.csv       what actually happened
+├── the skill                      ├── config   household, cadence, goals
+└── no household data              ├── meals    the meal library
+                                   └── log      what actually happened
 ```
+
+On a Sheet those are three tabs; on GitHub or a local directory they're
+`config.yaml`, `meals.csv`, and `log.csv`.
 
 Most households pick the **Google Sheet** backend — the data stays open in a tab
 that anyone in the family can read and edit directly, without needing to know

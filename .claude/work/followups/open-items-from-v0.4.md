@@ -26,17 +26,46 @@ project. The skill itself already got this boundary right (setup step 4 tells
 the user "the skill itself stores nothing"); only the summary's open-item
 framing was off.
 
-## 2. Pick the household's real backend and run setup for real
+## 2. Sheet backend — partly addressed in v0.4.1, one hard question still open
 
-**Open.** Expectation is the Google Sheet, not GitHub — most households will
-want data their family can open in a tab without repo literacy.
+Expectation is the Google Sheet, not GitHub: most households want data their
+family can open in a tab without repo literacy.
 
-Consequence worth acting on: the skill's setup step 1 currently recommends
-backends in the order github / sheet / local, and the sheet's paste-back
-degraded mode is described as a fallback. If the sheet is the majority path,
-that ordering and framing should invert, and the degraded mode needs to be
-*verified* rather than *specified* — the sentinel write test will settle the
-sheet-write question empirically on first real run.
+**Addressed in v0.4.1:**
+
+- Backend ordering now leads with `sheet` in the config enum and the backends
+  reference. (Setup step 1 already led with the sheet — an earlier read of this
+  saying otherwise was wrong.)
+- Setup step 1 now **preflights** what the runtime can reach before
+  recommending, so a household is never steered toward a backend that fails at
+  the sentinel write.
+- Config-on-sheet representation is now specified: dotted-path keys, 1-based
+  lists, reindex-on-delete, whole-tab atomic rewrites, blank means unset, no
+  escaping in cells. Previously the skill said only "config as key/value rows,"
+  which permitted at least three incompatible flattenings — a real hazard given
+  that multiple contributors share one store.
+
+**🔴 Still open, and it's the important one: there may be no Sheets write path.**
+
+Connector inventory taken in Claude Code on 2026-08-15:
+
+| Connector | What it exposes |
+|---|---|
+| Google Calendar | Full CRUD, 11 tools |
+| Google Drive | `authenticate` / `complete_authentication` only, and unauthenticated |
+| Google Sheets | Does not exist |
+
+Drive is not Sheets: Drive grants file-level access, while this backend needs
+cell-level read and write in named tabs. So in Claude Code as configured, the
+recommended backend cannot be written to at all.
+
+**Unverified: whether Claude Desktop exposes richer Google tooling.** That is
+where the users are, so it is the thing to test first. If Desktop also lacks
+spreadsheet write, the sheet backend is aspirational and the honest options are
+(a) lead with `local`/`github` until tooling exists, or (b) design the
+paste-back mode into a real first-class path rather than a degraded fallback.
+
+Settle this before recommending the skill to anyone outside the household.
 
 ## 3. Calendar integration untested
 
