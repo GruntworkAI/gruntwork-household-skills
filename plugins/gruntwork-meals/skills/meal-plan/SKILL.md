@@ -20,7 +20,9 @@ Infer the mode from what the user says. "Let's plan next week" is plan. "Build t
 
 All state lives in three documents in the household's configured storage backend. Read them at the start of any mode; write them back at the end of any mode that changed something. Never hold changes only in conversation, because the whole point of this skill is that state survives between sessions.
 
-### 1. config.yaml (the household)
+### 1. config (the household)
+
+Stored as `config.yaml` on the `local` and `github` backends, and as the `config` tab on the `sheet` backend, where there is no YAML involved at all. The structure below is the shape; see **Config on the sheet backend** for how it flattens.
 
 ```yaml
 household:
@@ -60,9 +62,37 @@ calendar:
   write_shopping_block: true | false  # block on shopping day
 
 storage:
-  backend: github | sheet | local
+  backend: sheet | github | local
   location: ""            # repo (owner/name) or sheet URL or directory path
 ```
+
+#### Config on the sheet backend
+
+A spreadsheet tab is flat and the config is nested, so the nesting is carried in the key. **Dotted-path keys are the single representation.** Do not maintain a second, prettier copy of the config anywhere in the sheet: the sheet is hand-editable by design, so a derived table is a table someone will edit, and their edit would vanish silently on the next config write.
+
+The `config` tab has three columns:
+
+| key | value | note |
+|---|---|---|
+| `household.name` | The Smith household | display name |
+| `household.members.1.name` | Alex | |
+| `household.members.1.role` | adult | adult, kid, or agent |
+| `household.members.2.name` | Sam | |
+| `household.members.2.role` | kid | |
+| `household.members.2.notes` | no mushrooms | dietary needs, dislikes, portions |
+| `cadence.planning_day` | Saturday | when the week gets planned |
+| `planning.consistency_dial` | 4 | 1 = maximize variety, 5 = run the proven rotation |
+
+The `note` column carries the human gloss that the comments above hold, so a family member who opens the tab can tell what a key means without asking. Notes are documentation only — never read a note as data, and never let a note's absence change behavior.
+
+Rules that keep two contributors from producing configs the other cannot read:
+
+- **Lists are 1-based.** `members.1` is the first member. Someone reading the tab counts from one.
+- **Deleting a list item reindexes, and rewrites the whole tab.** Removing member 2 of 3 makes the old member 3 the new member 2. Never leave an index gap — a gap leaves the next reader guessing whether that item is absent or merely blank. The config is small and config writes are rare (setup and reconfigure only), so always rewrite the tab whole rather than patching rows; that also makes the write atomic.
+- **A blank value means unset.** If a field ever needs to mean "deliberately empty," it gets an explicit sentinel word, never an empty cell.
+- **Do not escape anything in a sheet cell.** Cells hold commas, quotes, and newlines natively. Escaping rules apply only to the CSV documents on the `local` and `github` backends, where a value containing a comma must be quoted.
+
+When the user wants to see the config, render a readable view **in the conversation**. A generated view costs nothing and cannot be edited into a phantom state that disagrees with the stored rows.
 
 ### 2. meals.csv (the meal library)
 
@@ -94,8 +124,8 @@ week_of, day, planned_meal, actual_meal, status, by, notes
 
 The skill logic is identical across backends; only reading and writing differ. Check `storage.backend` in config and use the matching approach. If the backend is unreachable, say so plainly and offer to proceed with a local copy that the user must sync later. Do not silently fork state.
 
-- **github**: the three documents live at the root of a private repo. Read and write via the GitHub API or git, whichever is available in the current environment. Commit messages should name the mode and week (e.g. `plan: week of 2026-08-17`).
 - **sheet**: a Google Sheet with three tabs named `config`, `meals`, `log`, mirroring the structures above (config as key/value rows). Use the available Google Drive or Sheets tooling. If the current environment can read but not write the sheet, fall back to producing the updated rows in the conversation for the user to paste, and say that this is a degraded mode.
+- **github**: the three documents live at the root of a private repo. Read and write via the GitHub API or git, whichever is available in the current environment. Commit messages should name the mode and week (e.g. `plan: week of 2026-08-17`).
 - **local**: a directory path, for Claude Code use inside a repo the user controls.
 
 ## Multiple contributors
@@ -114,9 +144,15 @@ Run this when no config exists, or when the user asks to reconfigure. Storage co
 
 **Step 1: provision storage.** Do not assume a backend exists or that the user has thought about this. Walk them through it:
 
-1. Recommend a backend based on the environment and the household: a Google Sheet for households that live in claude.ai and want family members to open the data directly; a private GitHub repo for households comfortable with repos or planning agent contributors; local files for Claude Code use inside a directory the user controls.
-2. Guide creation concretely. For a sheet: create it (via available tooling, or walk the user through creating one) with three tabs named `config`, `meals`, `log`, and have the user share it with every contributor. For a repo: a new private repository under an account the household controls, deliberately separate from anyone's work or development accounts, shared with each contributor. For local: a directory path.
-3. Verify before proceeding: write a sentinel value to the store, read it back, and confirm out loud that read and write both work. If write fails (a read-only connector, missing permissions), say exactly what failed and what the user can change, and offer the degraded paste-back mode for sheets. Never continue setup on unverified storage, because an interview whose answers cannot be saved is wasted goodwill.
+1. **Preflight what this runtime can actually reach, before recommending anything.** Check which storage tooling exists in the current environment: spreadsheet read/write tooling for `sheet`, GitHub API or git access for `github`, filesystem access for `local`. Recommend only from what is present, and say plainly what you checked.
+
+   This ordering matters. Recommending a backend and then discovering at the verification step that it cannot be written is a bad first impression, and the user will have already invested in the choice. Note in particular that a Google **Drive** connector is not the same as spreadsheet tooling — Drive grants file-level access, while this backend needs to read and write cells in named tabs. Presence of Drive alone does not make `sheet` workable.
+
+   If the household clearly wants a backend this runtime cannot reach, say exactly that, name what they would need to enable or connect, and offer a working alternative rather than proceeding toward a wall. A household that wants the sheet but is running somewhere without spreadsheet tooling is better served by being told so now.
+
+2. Recommend from what preflight found, matched to the household: a Google Sheet for households that want family members to open the data directly, which is most of them; a private GitHub repo for households comfortable with repos or planning agent contributors; local files for Claude Code use inside a directory the user controls.
+3. Guide creation concretely. For a sheet: create it (via available tooling, or walk the user through creating one) with three tabs named `config`, `meals`, `log`; head the `config` tab with `key`, `value`, `note` and the other two with their column names from the state model; then have the user share it with every contributor, with edit access rather than view access. For a repo: a new private repository under an account the household controls, deliberately separate from anyone's work or development accounts, shared with each contributor. For local: a directory path.
+4. Verify before proceeding: write a sentinel value to the store, read it back, and confirm out loud that read and write both work. If write fails (a read-only connector, missing permissions), say exactly what failed and what the user can change, and offer the degraded paste-back mode for sheets. Never continue setup on unverified storage, because an interview whose answers cannot be saved is wasted goodwill.
 
 **Step 2: interview.** Cover every config field conversationally rather than as a form, explaining briefly why each answer matters (covered days set scope, acquisition sources shape the shopping lists). Reasonable defaults to offer: covered days of Monday through Wednesday for a first phase, dinner only, a repeat window of 21 days.
 
