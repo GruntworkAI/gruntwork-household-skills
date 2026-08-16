@@ -1,0 +1,44 @@
+# ---------------------------------------------------------------------------
+# HOUSEHOLD STATE — never commit to this repo.
+#
+# This repo ships the skill. A household's own data (config, meal library,
+# weekly log) lives in that household's SEPARATE private state store, created
+# by the skill's setup mode. These entries are defense in depth: the `local`
+# storage backend takes an arbitrary directory path, and if someone points it
+# at a checkout of this repo, their family's data would otherwise land in a
+# public repo on the next `git add`.
+# ---------------------------------------------------------------------------
+config.yaml
+config.yml
+meals.csv
+log.csv
+household/
+state/
+
+# Secrets & credentials (defense in depth for a public repo)
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*.credentials
+credentials.json
+service-account*.json
+token.json
+
+# Python (if helper scripts arrive later)
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# OS / editor cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Build output
+dist/

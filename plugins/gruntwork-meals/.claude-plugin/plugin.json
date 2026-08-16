@@ -1,0 +1,22 @@
+{
+  "name": "gruntwork-meals",
+  "version": "0.4.0",
+  "description": "Run a household meal plan as a repeating loop: plan the covered days, acquire the food, cook the meals, and record what actually happened so next week's plan is smarter than this week's. Generic by construction — every household detail lives in that household's own state store.",
+  "author": {
+    "name": "GruntworkAI",
+    "url": "https://github.com/GruntworkAI"
+  },
+  "repository": "https://github.com/GruntworkAI/gruntwork-household-skills",
+  "license": "MIT",
+  "keywords": [
+    "household",
+    "meals",
+    "meal-planning",
+    "menu",
+    "groceries",
+    "shopping-list",
+    "cooking",
+    "google-sheets",
+    "gruntwork"
+  ]
+}
