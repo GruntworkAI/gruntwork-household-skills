@@ -8,7 +8,7 @@ happened**, so next cycle starts from evidence instead of memory.
 
 | Plugin | What it does | Version |
 |---|---|---|
-| [`gruntwork-meals`](plugins/gruntwork-meals) | Plan the week's meals, build the shopping lists, cook, and log reality | 0.4.1 |
+| [`gruntwork-meals`](plugins/gruntwork-meals) | Plan the week's meals, build the shopping lists, cook, and log reality | 0.4.2 |
 
 ---
 

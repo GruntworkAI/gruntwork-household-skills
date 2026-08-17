@@ -45,7 +45,9 @@ family can open in a tab without repo literacy.
   which permitted at least three incompatible flattenings — a real hazard given
   that multiple contributors share one store.
 
-**🔴 Still open, and it's the important one: there may be no Sheets write path.**
+**RESOLVED 2026-08-17 by live test — see "Sheet backend: measured behavior" below.**
+
+**Superseded: the concern that there may be no Sheets write path.**
 
 Connector inventory taken in Claude Code on 2026-08-15:
 
@@ -66,6 +68,59 @@ spreadsheet write, the sheet backend is aspirational and the honest options are
 paste-back mode into a real first-class path rather than a degraded fallback.
 
 Settle this before recommending the skill to anyone outside the household.
+
+## Sheet backend: measured behavior (2026-08-17)
+
+Tested by uploading a purpose-built three-tab fixture (column counts 3/10/7,
+seeded with blank-cell, comma, numeric, date, and tab-identity probes) to a real
+Google Sheet and reading it back through the Drive connector.
+
+**Write is impossible on the plain Drive connector, confirmed at the schema
+level** rather than inferred from docs: the `update_file` tool accepts only
+`fileId`, `parentId`, and `title`. There is no content parameter. Files can be
+created, not edited.
+
+**Read is better than expected, and validates the v0.4.1 config spec:**
+
+| Probe | Result |
+|---|---|
+| All three tabs reached | ✅ |
+| Per-tab column structure | ✅ preserved, not flattened |
+| Blank cell mid-row | ✅ holds position; the following column does not shift |
+| Comma inside a cell | ✅ stays one value |
+| Numbers and ISO dates | ✅ verbatim, no reformatting |
+| Tab names | ❌ **not returned at all** |
+
+The blank-cell result is the one that mattered: the dotted-path key/value scheme
+depends on it, and it holds.
+
+Two defects found and fixed in v0.4.2: identify tables by header row rather than
+tab name, and switch multi-value separators from `|` to `;` because the returned
+representation is pipe-delimited and escapes embedded pipes.
+
+**Other read paths considered and rejected:** a CSV export returns cleaner text
+(proper quoting, no escaping) but only ever the first tab, with no way to select
+another. An `.xlsx` export does carry tab names, but returns base64 and so needs
+a decode-and-parse step — available in Claude Code, unavailable on Desktop, which
+is the surface that matters. Depending on the returned text's incidental
+formatting is unwise regardless: Google documents that it changes over time.
+
+**Consequence for positioning:** there are two tiers, and the zero-setup one is
+real. Read-and-paste needs nothing installed and should be the documented default;
+native read/write via a Sheets MCP server is for a household with someone willing
+to stand up a cloud project once.
+
+## 8. Google connectors may share one account grant
+
+Authorizing Drive on a second Google account appeared to move the **Calendar**
+connector to that account as well — the calendar list afterward showed only the
+new account's calendars. Not proven (no before-snapshot was taken), but worth
+knowing before assuming per-product account independence.
+
+Matters here because the household store and the family-facing calendar were
+expected to be able to live on different accounts. If one grant covers all Google
+products, that assumption is wrong and the calendar integration has to target
+whichever account the store uses.
 
 ## 3. Calendar integration untested
 

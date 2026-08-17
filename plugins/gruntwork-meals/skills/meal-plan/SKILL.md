@@ -81,6 +81,7 @@ The `config` tab has three columns:
 | `household.members.2.role` | kid | |
 | `household.members.2.notes` | no mushrooms | dietary needs, dislikes, portions |
 | `cadence.planning_day` | Saturday | when the week gets planned |
+| `cadence.covered_days` | Monday;Tuesday;Wednesday | semicolon-separated list |
 | `planning.consistency_dial` | 4 | 1 = maximize variety, 5 = run the proven rotation |
 
 The `note` column carries the human gloss that the comments above hold, so a family member who opens the tab can tell what a key means without asking. Notes are documentation only — never read a note as data, and never let a note's absence change behavior.
@@ -94,6 +95,24 @@ Rules that keep two contributors from producing configs the other cannot read:
 
 When the user wants to see the config, render a readable view **in the conversation**. A generated view costs nothing and cannot be edited into a phantom state that disagrees with the stored rows.
 
+#### Identify tables by their header row, never by tab name
+
+**The reader does not return tab names.** A read of the spreadsheet comes back as three unlabeled tables in document order — the words `config`, `meals`, and `log` appear nowhere in it. Verified against a live sheet on 2026-08-17.
+
+So identify each table by its **header row**, which is unique across the three:
+
+| Table | Header row begins |
+|---|---|
+| config | `key, value, note` |
+| meals | `name, tags, protein, …` |
+| log | `week_of, day, planned_meal, …` |
+
+Do not rely on document order. Tabs can be reordered by any family member with edit access, and nothing in the returned representation would reveal it.
+
+What the same verification confirmed does survive intact, so trust it: blank cells hold their position (a blank `value` does not shift the `note` after it), commas inside a cell stay within that cell, and numbers and ISO dates come back exactly as written rather than reformatted. The dotted-path scheme above is safe on this backend.
+
+One caution about the representation itself: Google states the text form may change over time, so the skill must not depend on its incidental formatting — the phantom leading row, the alignment markers, or the backslash-escaping of `_` and `|`. Depend only on the header row and the cell values.
+
 ### 2. meals.csv (the meal library)
 
 One row per distinct meal the household has ever made or seriously considered. This is what powers both halves of the core requirement: avoid accidental repetition, and deliberately repeat the winners.
@@ -102,7 +121,7 @@ One row per distinct meal the household has ever made or seriously considered. T
 name, tags, protein, prep, effort, rating, times_made, last_made, source, notes
 ```
 
-- `tags`: comma-free labels separated by `|` (e.g. `weeknight|kid-favorite|one-pan`)
+- `tags`: comma-free labels separated by `;` (e.g. `weeknight;kid-favorite;one-pan`). Not `|` — on the sheet backend the reader returns tables in a pipe-delimited form, and a pipe inside a value is escaped rather than kept literal. The value survives, but any parser that splits on `|` shreds the row. The same rule applies to every multi-value field, including `cadence.covered_days`.
 - `prep`: scratch | semi | prepared. Prepared and semi-prepared meals (a store rotisserie chicken, frozen dumplings the kids love) are first-class citizens of the library, not compromises. Many households run their best weeknights on them, and the skill should never imply that scratch cooking is the goal.
 - `effort`: quick | moderate | project (weeknight plans should skew quick)
 - `rating`: keep | mixed | retire. A meal rated retire is never proposed again unless the user asks. A meal rated keep with a `last_made` older than the repeat window is a prime candidate.
@@ -124,7 +143,12 @@ week_of, day, planned_meal, actual_meal, status, by, notes
 
 The skill logic is identical across backends; only reading and writing differ. Check `storage.backend` in config and use the matching approach. If the backend is unreachable, say so plainly and offer to proceed with a local copy that the user must sync later. Do not silently fork state.
 
-- **sheet**: a Google Sheet with three tabs named `config`, `meals`, `log`, mirroring the structures above (config as key/value rows). Use the available Google Drive or Sheets tooling. If the current environment can read but not write the sheet, fall back to producing the updated rows in the conversation for the user to paste, and say that this is a degraded mode.
+- **sheet**: a Google Sheet with three tabs named `config`, `meals`, `log`, mirroring the structures above. This backend has two tiers, and which one is available depends entirely on the tooling connected to the current runtime. Establish which at preflight and tell the user plainly.
+
+  - **Read-and-paste (no setup).** A plain Google Drive connector reads the sheet with good fidelity but **cannot write to it** — it can create new files, not edit existing ones. Read state natively, then hand the user the changed rows to paste. This is a supported primary mode, not a degraded one: reads happen every mode and would be miserable by hand, while writes are a handful of small rows a week. Re-read immediately before producing any paste block, so the shared-store guarantee still holds — only the final keystroke is the user's.
+  - **Native read/write.** A spreadsheet connector with cell-level write (for example Google's own Sheets MCP server) reads and writes directly, addresses tabs by name, and needs no paste step. It requires real setup — a cloud project and OAuth client — so treat it as the option for a household with someone willing to do that once, not as the default.
+
+  Never claim a write succeeded in read-and-paste mode until the user confirms they pasted it.
 - **github**: the three documents live at the root of a private repo. Read and write via the GitHub API or git, whichever is available in the current environment. Commit messages should name the mode and week (e.g. `plan: week of 2026-08-17`).
 - **local**: a directory path, for Claude Code use inside a repo the user controls.
 
