@@ -18,11 +18,13 @@ Infer the mode from what the user says. "Let's plan next week" is plan. "Build t
 
 ## State model
 
-All state lives in three documents in the household's configured storage backend. Read them at the start of any mode; write them back at the end of any mode that changed something. Never hold changes only in conversation, because the whole point of this skill is that state survives between sessions.
+All state lives in three documents in the household's configured storage backend. Never hold changes only in conversation, because the whole point of this skill is that state survives between sessions.
+
+**Read only the documents a mode needs, not the whole store.** `setup` and `plan` need all three; `shop` needs config and the current week of the log; `cook` needs the log and, for prep notes, meals. The log grows every week, so reading it wholesale on every interaction gets steadily more wasteful for no gain. Where only recent history matters, read the recent rows.
 
 ### 1. config (the household)
 
-Stored as `config.yaml` on the `local` and `github` backends, and as the `config` tab on the `sheet` backend, where there is no YAML involved at all. The structure below is the shape; see **Config on the sheet backend** for how it flattens.
+Stored as `config.yaml` on the `local` and `github` backends, and as the `config` Sheet on the `sheet` backend, where there is no YAML involved at all. The structure below is the shape; see **Config on the sheet backend** for how it flattens.
 
 ```yaml
 household:
@@ -30,6 +32,8 @@ household:
   members:
     - name: ""
       role: adult | kid | agent   # agent = a household AI assistant that runs this skill with its own credentials
+      email: ""           # REQUIRED for adult and agent, omitted for kid. This is how the
+                          # store gets shared with them; a name cannot be granted access.
       notes: ""           # dietary needs, strong dislikes, portion notes (n/a for agents)
   goals:
     shared: ""            # e.g. "generally healthy, high protein"
@@ -63,38 +67,60 @@ calendar:
 
 storage:
   backend: sheet | github | local
-  location: ""            # repo (owner/name) or sheet URL or directory path
+  location: ""            # sheet: the FOLDER id holding the documents (not a document id)
+                          # github: repo (owner/name).  local: directory path
+  archive_keep: 20        # sheet backend: how many superseded copies of EACH document to
+                          # retain in archive/ before trashing the oldest. Default 20; do
+                          # not interview for it. Sized for the log, which churns fastest
+                          # at roughly five writes a week, so 20 is about a month of
+                          # history there and years for config. Raising it costs almost
+                          # nothing; lowering it quietly discards the backup the archive
+                          # exists to provide.
+
+meta:
+  last_updated: ""        # ISO timestamp of the last config write
+  last_updated_by: ""     # which contributor drove that write; see "Who last touched this"
 ```
 
 #### Config on the sheet backend
 
 A spreadsheet tab is flat and the config is nested, so the nesting is carried in the key. **Dotted-path keys are the single representation.** Do not maintain a second, prettier copy of the config anywhere in the sheet: the sheet is hand-editable by design, so a derived table is a table someone will edit, and their edit would vanish silently on the next config write.
 
-The `config` tab has three columns:
+The `config` Sheet has three columns:
 
 | key | value | note |
 |---|---|---|
 | `household.name` | The Smith household | display name |
 | `household.members.1.name` | Alex | |
 | `household.members.1.role` | adult | adult, kid, or agent |
+| `household.members.1.email` | alex@example.com | how the store is shared with them |
 | `household.members.2.name` | Sam | |
 | `household.members.2.role` | kid | |
 | `household.members.2.notes` | no mushrooms | dietary needs, dislikes, portions |
 | `cadence.planning_day` | Saturday | when the week gets planned |
+| `cadence.covered_days` | Monday;Tuesday;Wednesday | semicolon-separated list |
 | `planning.consistency_dial` | 4 | 1 = maximize variety, 5 = run the proven rotation |
 
-The `note` column carries the human gloss that the comments above hold, so a family member who opens the tab can tell what a key means without asking. Notes are documentation only — never read a note as data, and never let a note's absence change behavior.
+The `note` column carries the human gloss that the comments above hold, so a family member who opens it can tell what a key means without asking. Notes are documentation only — never read a note as data, and never let a note's absence change behavior.
 
 Rules that keep two contributors from producing configs the other cannot read:
 
-- **Lists are 1-based.** `members.1` is the first member. Someone reading the tab counts from one.
-- **Deleting a list item reindexes, and rewrites the whole tab.** Removing member 2 of 3 makes the old member 3 the new member 2. Never leave an index gap — a gap leaves the next reader guessing whether that item is absent or merely blank. The config is small and config writes are rare (setup and reconfigure only), so always rewrite the tab whole rather than patching rows; that also makes the write atomic.
+- **Lists are 1-based.** `members.1` is the first member. Someone reading it counts from one.
+- **Deleting a list item reindexes, and rewrites the whole document.** Removing member 2 of 3 makes the old member 3 the new member 2. Never leave an index gap — a gap leaves the next reader guessing whether that item is absent or merely blank. The config is small and config writes are rare (setup and reconfigure only), so always rewrite the document whole rather than patching rows; that also makes the write atomic.
 - **A blank value means unset.** If a field ever needs to mean "deliberately empty," it gets an explicit sentinel word, never an empty cell.
 - **Do not escape anything in a sheet cell.** Cells hold commas, quotes, and newlines natively. Escaping rules apply only to the CSV documents on the `local` and `github` backends, where a value containing a comma must be quoted.
 
 When the user wants to see the config, render a readable view **in the conversation**. A generated view costs nothing and cannot be edited into a phantom state that disagrees with the stored rows.
 
-### 2. meals.csv (the meal library)
+#### What survives a sheet read
+
+Verified against a live sheet on 2026-08-17, so trust these rather than defending against them: blank cells hold their position (a blank `value` does not shift the `note` after it), commas inside a cell stay within that cell, and numbers and ISO dates come back exactly as written rather than reformatted. The dotted-path scheme above is safe on this backend.
+
+Two cautions. Google states the returned text form may change over time, so never depend on its incidental formatting — the phantom leading row, the alignment markers, or the backslash-escaping of `_` and `|`. Depend only on the header row and the cell values.
+
+And **a read returns no tab names at all.** With one document per table this does not arise, because each document is identified by its own filename. It matters only for a legacy store that kept all three tables as tabs in a single Sheet: there, identify each table by its header row (`key,value,note` / `name,tags,…` / `week_of,day,…`), never by position, since any contributor can reorder tabs invisibly.
+
+### 2. meals (the meal library)
 
 One row per distinct meal the household has ever made or seriously considered. This is what powers both halves of the core requirement: avoid accidental repetition, and deliberately repeat the winners.
 
@@ -102,13 +128,13 @@ One row per distinct meal the household has ever made or seriously considered. T
 name, tags, protein, prep, effort, rating, times_made, last_made, source, notes
 ```
 
-- `tags`: comma-free labels separated by `|` (e.g. `weeknight|kid-favorite|one-pan`)
+- `tags`: comma-free labels separated by `;` (e.g. `weeknight;kid-favorite;one-pan`). Not `|` — on the sheet backend the reader returns tables in a pipe-delimited form, and a pipe inside a value is escaped rather than kept literal. The value survives, but any parser that splits on `|` shreds the row. The same rule applies to every multi-value field, including `cadence.covered_days`.
 - `prep`: scratch | semi | prepared. Prepared and semi-prepared meals (a store rotisserie chicken, frozen dumplings the kids love) are first-class citizens of the library, not compromises. Many households run their best weeknights on them, and the skill should never imply that scratch cooking is the goal.
 - `effort`: quick | moderate | project (weeknight plans should skew quick)
 - `rating`: keep | mixed | retire. A meal rated retire is never proposed again unless the user asks. A meal rated keep with a `last_made` older than the repeat window is a prime candidate.
 - `source`: recipe link, cookbook page, or "house standard"
 
-### 3. log.csv (the weekly log)
+### 3. log (the weekly log)
 
 One row per covered day per week. This is the reality record, and it must record what happened, not what was intended. The plan is a hypothesis; the log is the data.
 
@@ -124,9 +150,60 @@ week_of, day, planned_meal, actual_meal, status, by, notes
 
 The skill logic is identical across backends; only reading and writing differ. Check `storage.backend` in config and use the matching approach. If the backend is unreachable, say so plainly and offer to proceed with a local copy that the user must sync later. Do not silently fork state.
 
-- **sheet**: a Google Sheet with three tabs named `config`, `meals`, `log`, mirroring the structures above (config as key/value rows). Use the available Google Drive or Sheets tooling. If the current environment can read but not write the sheet, fall back to producing the updated rows in the conversation for the user to paste, and say that this is a degraded mode.
+- **sheet**: a shared Google Drive **folder** holding three separate Sheets — `config`, `meals`, `log` — plus an `archive/` subfolder. One document per Sheet, not three tabs in one document. See **The sheet backend** below for the full mechanics; it is the most involved backend and the one most households will choose.
 - **github**: the three documents live at the root of a private repo. Read and write via the GitHub API or git, whichever is available in the current environment. Commit messages should name the mode and week (e.g. `plan: week of 2026-08-17`).
 - **local**: a directory path, for Claude Code use inside a repo the user controls.
+
+## The sheet backend
+
+The store is a Drive **folder** shared with every contributor, holding three Sheets and an `archive/` subfolder:
+
+```
+Household Meal Plan/          <- storage.location is THIS folder's id
+  config                      <- one tab, key/value/note
+  meals                       <- one tab
+  log                         <- one tab
+  archive/                    <- superseded copies, newest first
+    log 2026-08-18T00-07Z by-alex
+    log 2026-08-10T18-22Z by-sam
+```
+
+Separate documents rather than one document with three tabs, for two reasons: each is addressable by filename, and each mode reads only what it needs. `cook` has no use for the config or a year of log history, and dragging the whole store through every "what's for dinner" gets worse every week.
+
+### Writing: replace, don't edit
+
+The Drive connector **cannot edit an existing file** — it creates files and changes metadata, nothing more. Writes therefore work by replacement:
+
+1. **Resolve** the live document by searching the folder for its title.
+2. **Read** it. This is also the re-read that the shared-store guarantee requires; do it immediately before writing, not at the start of the session.
+3. **Build** the new full contents in memory.
+4. **Create** the replacement in the same folder, same title. It inherits the folder's sharing automatically, so every contributor keeps access without anything being re-shared.
+5. **Archive** the old one: move it into `archive/` and rename it `<title> <ISO timestamp> by-<contributor>`.
+6. **Prune** archived copies of that document beyond `storage.archive_keep` (default 20), oldest first. Count per document, not across the archive as a whole — otherwise the fast-churning log would evict the config's only history.
+
+Never trash a superseded document instead of archiving it. The archive is what makes a bad write survivable, and it costs nothing.
+
+### Detecting a concurrent write
+
+**Compare the file id, not a timestamp.** Replacement gives every write a new id, so if the id you resolved in step 1 differs from the one you read earlier in the session, another contributor wrote in between. This is exact — no clock skew, no granularity problem, nothing to parse.
+
+On a conflict, say so and reconcile with the user rather than overwriting. Their version is in `archive/` either way, so nothing is lost; say that too, because it is the difference between an alarming message and a manageable one.
+
+If a read ever finds **two** documents with the same title in the folder, a previous run died between steps 4 and 5. Self-heal: take the most recently created, archive the other, and mention it once.
+
+### Who last touched this
+
+Drive's own `modifiedTime` records when a file changed but **cannot record who** — every write goes through the one account the store lives on, so metadata attributes all of them to that account no matter which contributor drove the session. Attribution has to live in content.
+
+- **config** carries `meta.last_updated` and `meta.last_updated_by` rows. Set both on every config write.
+- **log** already attributes per row via the `by` column.
+- **meals** needs no document-level stamp; its history is the archive, and archived filenames carry both timestamp and contributor.
+
+### When the runtime cannot write to Drive
+
+Preflight decides. If the runtime can read Drive but not create files, fall back to reading natively and handing the user the changed rows to paste, and say plainly that this is happening. Re-read immediately before producing the paste block so the state is current, and **never report the write as done until the user confirms they pasted it** — in this mode the write genuinely has not happened yet.
+
+A connector with true cell-level write (Google's own Sheets MCP server, for instance) can update in place and skip the replace-and-archive cycle entirely. It requires a cloud project and OAuth client, so treat it as an upgrade a household may choose, never a prerequisite.
 
 ## Multiple contributors
 
@@ -135,7 +212,7 @@ The state store is shared infrastructure, and more than one contributor may read
 What the skill does do:
 
 - **Ask who's driving.** If config lists more than one contributor of role adult or agent, ask once at the start of a session and stamp the `by` column on any log rows written. Self-declared attribution is sufficient; the goal is context ("dad logged the bail"), not security.
-- **Re-read before writing.** Another contributor may have written since the session started. Immediately before any write, re-read the affected document and apply changes against the current state rather than the state loaded earlier. If something changed underneath (tonight's row was already updated), say so and reconcile with the user instead of overwriting.
+- **Re-read before writing.** Another contributor may have written since the session started. Immediately before any write, re-read the affected document and apply changes against the current state rather than the state loaded earlier. If something changed underneath (tonight's row was already updated), say so and reconcile with the user instead of overwriting. On the sheet backend, compare file ids to detect this exactly — see **Detecting a concurrent write**.
 - **Never delete another contributor's data silently.** Reconciliation can update rows, but removing history requires the user to ask.
 
 ## Mode: setup (first run)
@@ -151,16 +228,27 @@ Run this when no config exists, or when the user asks to reconfigure. Storage co
    If the household clearly wants a backend this runtime cannot reach, say exactly that, name what they would need to enable or connect, and offer a working alternative rather than proceeding toward a wall. A household that wants the sheet but is running somewhere without spreadsheet tooling is better served by being told so now.
 
 2. Recommend from what preflight found, matched to the household: a Google Sheet for households that want family members to open the data directly, which is most of them; a private GitHub repo for households comfortable with repos or planning agent contributors; local files for Claude Code use inside a directory the user controls.
-3. Guide creation concretely. For a sheet: create it (via available tooling, or walk the user through creating one) with three tabs named `config`, `meals`, `log`; head the `config` tab with `key`, `value`, `note` and the other two with their column names from the state model; then have the user share it with every contributor, with edit access rather than view access. For a repo: a new private repository under an account the household controls, deliberately separate from anyone's work or development accounts, shared with each contributor. For local: a directory path.
-4. Verify before proceeding: write a sentinel value to the store, read it back, and confirm out loud that read and write both work. If write fails (a read-only connector, missing permissions), say exactly what failed and what the user can change, and offer the degraded paste-back mode for sheets. Never continue setup on unverified storage, because an interview whose answers cannot be saved is wasted goodwill.
+3. Guide creation concretely.
 
-**Step 2: interview.** Cover every config field conversationally rather than as a form, explaining briefly why each answer matters (covered days set scope, acquisition sources shape the shopping lists). Reasonable defaults to offer: covered days of Monday through Wednesday for a first phase, dinner only, a repeat window of 21 days.
+   For a **sheet**: create a folder to hold the store, then inside it an `archive/` subfolder and three Sheets titled `config`, `meals`, and `log`. Head `config` with `key`, `value`, `note`, and the other two with their column names from the state model. Record the **folder's** id as `storage.location` — not any document's id, since documents are replaced and their ids change while the folder's does not.
+
+   Then collect contributors and share. Ask for the email address of every adult and of any household agent, explain that this is how they get access, and share the **folder** with each as an editor. Sharing the folder rather than the documents is what makes replacement writes safe: a newly created document inherits folder access automatically, so nobody loses access when a document is replaced. Sharing propagates to documents that already exist as well as ones created later, so the order does not matter.
+
+   For a **repo**: a new private repository under an account the household controls, deliberately separate from anyone's work or development accounts, shared with each contributor. For **local**: a directory path.
+
+4. Verify before proceeding: write a sentinel value to the store, read it back, and confirm out loud that read and write both work. If write fails (a read-only connector, missing permissions), say exactly what failed and what the user can change, and offer the paste-back mode for sheets. Never continue setup on unverified storage, because an interview whose answers cannot be saved is wasted goodwill.
+
+**Step 2: interview.** Cover the config fields that reflect a household choice, conversationally rather than as a form, explaining briefly why each answer matters (covered days set scope, acquisition sources shape the shopping lists). Reasonable defaults to offer: covered days of Monday through Wednesday for a first phase, dinner only, a repeat window of 21 days.
+
+Do not interview for mechanical fields that have sound defaults and no household opinion attached — `storage.archive_keep` and the `meta` stamps among them. Set them and move on. Every question spent on plumbing is one the user has to answer before reaching the part they came for.
 
 Ask where the household sits on the consistency dial, and explain the tradeoff in one sentence: high consistency runs the proven rotation and is often the right call for a new or limited-day plan; high variety works the repeat window hard. There is no correct answer, only a household preference.
 
 **Step 3: seed the meal library.** Ask for five to ten meals the household already makes and likes, with quick ratings, and explicitly ask which prepared or semi-prepared items are house staples (store rotisserie chicken, frozen dumplings, and the like), since users tend to omit these unless prompted, treating them as "not real meals" when they are often the most reliable rows in the library. A cold-start library makes the first plan session dramatically better because the interview can anchor on proven meals instead of guessing.
 
-**Step 4: write and confirm.** Write all three documents to the verified backend, and confirm to the user where their data lives, who can access it, and that the skill itself stores nothing.
+**Step 4: write and confirm.** Write all three documents to the verified backend, and confirm to the user where their data lives, who can access it (name them), and that the skill itself stores nothing.
+
+**Adding a contributor later.** When reconfigure adds an adult or agent, share the store with their address as part of that change. A member added to config but never granted access is the failure this is written to prevent: everything looks configured, and they silently cannot read a thing.
 
 ## Mode: plan
 

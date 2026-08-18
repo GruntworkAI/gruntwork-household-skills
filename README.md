@@ -8,7 +8,7 @@ happened**, so next cycle starts from evidence instead of memory.
 
 | Plugin | What it does | Version |
 |---|---|---|
-| [`gruntwork-meals`](plugins/gruntwork-meals) | Plan the week's meals, build the shopping lists, cook, and log reality | 0.4.1 |
+| [`gruntwork-meals`](plugins/gruntwork-meals) | Plan the week's meals, build the shopping lists, cook, and log reality | 0.4.3 |
 
 ---
 
@@ -26,18 +26,25 @@ household without handing over yours.
 
 ```
 this repo (public)                 your state store (private, yours)
-├── the skill                      ├── config   household, cadence, goals
-└── no household data              ├── meals    the meal library
-                                   └── log      what actually happened
+├── the skill                      ├── config     household, cadence, goals
+└── no household data              ├── meals      the meal library
+                                   ├── log        what actually happened
+                                   └── archive/   superseded copies, kept as backup
 ```
 
-On a Sheet those are three tabs; on GitHub or a local directory they're
-`config.yaml`, `meals.csv`, and `log.csv`.
+On Google Drive those are separate Sheets in one shared folder; on GitHub or a
+local directory they're `config.yaml`, `meals.csv`, and `log.csv`.
 
-Most households pick the **Google Sheet** backend — the data stays open in a tab
-that anyone in the family can read and edit directly, without needing to know
-what a repo is. Pick GitHub if you're already comfortable with repos, or if you
-plan to have a household AI agent contributing with its own credentials.
+Every change replaces a document rather than editing it, and the superseded copy
+moves to `archive/` stamped with when it changed and who changed it. So a bad
+week is recoverable, and two people editing at once can't quietly lose each
+other's work.
+
+Most households pick the **Google Drive** backend — the data stays in a shared
+folder anyone in the family can open and edit directly, without needing to know
+what a repo is. Setup asks for each adult's email address and shares the folder
+with them. Pick GitHub if you're already comfortable with repos, or if you plan
+to have a household AI agent contributing with its own credentials.
 
 ---
 
