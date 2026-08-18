@@ -26,17 +26,35 @@ Three documents in your own store — never in this repo. See
 
 | Document | Holds |
 |---|---|
-| `config.yaml` | Household members, goals, cadence, consistency dial, acquisition sources, calendar settings, storage block |
-| `meals.csv` | One row per distinct meal: `name, tags, protein, prep, effort, rating, times_made, last_made, source, notes` |
-| `log.csv` | One row per covered day per week: `week_of, day, planned_meal, actual_meal, status, by, notes` |
+| `config` | Household members and their emails, goals, cadence, consistency dial, acquisition sources, calendar settings, storage block |
+| `meals` | One row per distinct meal: `name, tags, protein, prep, effort, rating, times_made, last_made, source, notes` |
+| `log` | One row per covered day per week: `week_of, day, planned_meal, actual_meal, status, by, notes` |
+
+Each mode reads only what it needs. "What's for dinner" doesn't drag a year of
+log history along with it.
 
 ### Backends
 
 | Backend | Best for | Notes |
 |---|---|---|
-| **sheet** | Most households | A Google Sheet with `config`, `meals`, `log` tabs. Family members read and edit it directly, no repo literacy required. |
+| **sheet** | Most households | A shared Google Drive folder holding three separate Sheets plus `archive/`. Family members open and edit them directly, no repo literacy required. Setup shares the folder with each adult by email. |
 | **github** | Repo-comfortable households; agent contributors | Three documents at the root of a private repo. Commit messages name the mode and week. |
 | **local** | Claude Code use | A directory you control. Do not point it inside a checkout of this repo. |
+
+### How writes work on Drive
+
+The Drive connector can create files but cannot edit existing ones, so a change
+**replaces** a document rather than editing it, and the superseded copy moves to
+`archive/` renamed with the timestamp and the contributor who made the change.
+
+That falls out well. Sharing lives on the folder, so a replacement inherits
+access and nobody gets locked out. Every write leaves a restore point. And
+because each replacement gets a new file id, the skill can tell precisely whether
+someone else wrote while you were working — no timestamp guesswork.
+
+`storage.archive_keep` sets how many superseded copies of each document to retain,
+defaulting to 20 — roughly a month of history for the log, which changes most
+often, and years for the config, which barely changes at all.
 
 ## The consistency dial
 

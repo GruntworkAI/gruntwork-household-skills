@@ -110,6 +110,46 @@ real. Read-and-paste needs nothing installed and should be the documented defaul
 native read/write via a Sheets MCP server is for a household with someone willing
 to stand up a cloud project once.
 
+## Drive write path: measured and adopted in v0.4.3 (2026-08-18)
+
+The v0.4.2 conclusion — that tier 1 had to be read-and-paste — was wrong, and
+folder-level sharing is why. Tested live:
+
+| Behavior | Result |
+|---|---|
+| File created inside a shared folder inherits the folder's sharing | ✅ |
+| A file that already existed gains access when the folder is shared later | ✅ dynamic, so setup order doesn't matter |
+| `update_file` moves **and** renames in one call (`parentId` + `title`) | ✅ |
+
+So the one write primitive available — metadata-only `update_file` — is exactly
+what archiving needs, and `create_file` with a `parentId` handles replacement
+without losing anyone's access. Full cycle: resolve → read → build → create
+replacement → move old to `archive/` renamed with timestamp and contributor →
+prune per document beyond `archive_keep`.
+
+**Why this beats what it replaced:** native writes with zero setup, family
+access preserved, and version history for free. The earlier objection
+("create-and-replace breaks sharing") assumed file-level shares and does not
+apply to a shared folder.
+
+**Concurrency detection falls out of it.** Every replacement gets a new file id,
+so comparing ids is an exact did-someone-else-write check — no clock skew, no
+timestamp granularity, nothing to parse. Better than the timestamp approach that
+prompted the question.
+
+**Attribution must live in content.** Drive's `modifiedTime` records when but
+never who, because every write goes through the single account hosting the store.
+Hence `meta.last_updated_by` in config, the existing `by` column in log, and the
+contributor stamped into archived filenames.
+
+**Config gained `email` on adult and agent members.** Sharing needs an address; a
+name can't be granted access. A member configured without one is silently locked
+out, which is the failure the requirement exists to prevent.
+
+**`archive_keep` defaults to 20, and setup must not interview for it.** Sized for
+the log at roughly five writes a week — about a month there, years for config.
+Pruning counts per document, or the fast-churning log would evict config history.
+
 ## 8. Google connectors may share one account grant
 
 Authorizing Drive on a second Google account appeared to move the **Calendar**
