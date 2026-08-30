@@ -1,5 +1,10 @@
 # Findings from the first live setup run (2026-08-25)
 
+> **All defects and gaps below were fixed in v0.4.4.** Kept as the record of what
+> a real run found, and of what the skill got wrong before anyone ran it. A
+> seventh issue — the word "sentinel" in shipped prose — was caught in review of
+> the fix itself and is noted at the end.
+
 First execution of `meal-plan` against a real household and a real Drive store.
 Everything below was found by running it, not by reading it.
 
@@ -145,3 +150,21 @@ went.
   durability.
 - **Folder-level sharing does propagate**, both to documents created later and to
   documents that already existed when the share was made. Verified twice.
+
+---
+
+## D4. "Sentinel" shipped in user-facing prose
+
+Caught while reviewing the fixes above, not during the run. The skill told Claude
+to write a "sentinel" — a term meaning nothing to a family setting up meal
+planning, and one that reaches them directly, because SKILL.md prose becomes what
+Claude *says* mid-conversation.
+
+It had survived four version bumps and several reviews by reading as unremarkable
+to anyone who works with software.
+
+**Fixed in v0.4.4:** now "throwaway test document" throughout, and the same
+replacement applied to the blank-value rule, which used "sentinel" in its other
+sense. A convention was added to CLAUDE.md: no unexplained jargon in SKILL.md or
+shipped READMEs; developer-facing files may use ordinary technical vocabulary.
+The line is who ends up hearing it.
