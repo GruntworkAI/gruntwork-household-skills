@@ -107,14 +107,16 @@ Rules that keep two contributors from producing configs the other cannot read:
 
 - **Lists are 1-based.** `members.1` is the first member. Someone reading it counts from one.
 - **Deleting a list item reindexes, and rewrites the whole document.** Removing member 2 of 3 makes the old member 3 the new member 2. Never leave an index gap — a gap leaves the next reader guessing whether that item is absent or merely blank. The config is small and config writes are rare (setup and reconfigure only), so always rewrite the document whole rather than patching rows; that also makes the write atomic.
-- **A blank value means unset.** If a field ever needs to mean "deliberately empty," it gets an explicit sentinel word, never an empty cell.
+- **A blank value means unset.** If a field ever needs to mean "deliberately empty," write an explicit word saying so, never an empty cell.
 - **Do not escape anything in a sheet cell.** Cells hold commas, quotes, and newlines natively. Escaping rules apply only to the CSV documents on the `local` and `github` backends, where a value containing a comma must be quoted.
 
 When the user wants to see the config, render a readable view **in the conversation**. A generated view costs nothing and cannot be edited into a phantom state that disagrees with the stored rows.
 
 #### What survives a sheet read
 
-Verified against a live sheet on 2026-08-17, so trust these rather than defending against them: blank cells hold their position (a blank `value` does not shift the `note` after it), commas inside a cell stay within that cell, and numbers and ISO dates come back exactly as written rather than reformatted. The dotted-path scheme above is safe on this backend.
+Verified against a live sheet, so trust these rather than defending against them: blank cells hold their position (a blank `value` does not shift the `note` after it), commas inside a cell stay within that cell, and numbers and ISO dates come back exactly as written rather than reformatted. The dotted-path scheme above is safe on this backend.
+
+**Booleans are the exception.** Sheets coerces them to its own boolean type, so a written `true` reads back as `TRUE`. Compare booleans case-insensitively, and never match on the exact string `true`. Everything else round-trips as written.
 
 Two cautions. Google states the returned text form may change over time, so never depend on its incidental formatting — the phantom leading row, the alignment markers, or the backslash-escaping of `_` and `|`. Depend only on the header row and the cell values.
 
@@ -177,7 +179,9 @@ The Drive connector **cannot edit an existing file** — it creates files and ch
 1. **Resolve** the live document by searching the folder for its title.
 2. **Read** it. This is also the re-read that the shared-store guarantee requires; do it immediately before writing, not at the start of the session.
 3. **Build** the new full contents in memory.
-4. **Create** the replacement in the same folder, same title. It inherits the folder's sharing automatically, so every contributor keeps access without anything being re-shared.
+4. **Create** the replacement in the same folder, same title, **uploading the whole document as CSV text and letting Drive convert it to a Sheet.** Create the file with a CSV content type and the full contents as text; do not create a file with the Google spreadsheet type and expect to fill it in afterwards. That produces an empty Sheet, and there is no way out of it — the connector cannot edit an existing file, so an empty document stays empty. This is the step the whole backend depends on. The replacement inherits the folder's sharing automatically, so every contributor keeps access without anything being re-shared.
+
+   Because the upload transport is CSV, **quote any value containing a comma, a quote, or a newline on the way up**. This is not in tension with "do not escape anything in a sheet cell" below: that rule is about what ends up stored in the cell, and this one is about getting it there intact. `no mushrooms, no olives` is written to the CSV as `"no mushrooms, no olives"` and lands in the cell unquoted, as one value.
 5. **Archive** the old one: move it into `archive/` and rename it `<title> <ISO timestamp> by-<contributor>`.
 6. **Prune** archived copies of that document beyond `storage.archive_keep` (default 20), oldest first. Count per document, not across the archive as a whole — otherwise the fast-churning log would evict the config's only history.
 
@@ -230,13 +234,23 @@ Run this when no config exists, or when the user asks to reconfigure. Storage co
 2. Recommend from what preflight found, matched to the household: a Google Sheet for households that want family members to open the data directly, which is most of them; a private GitHub repo for households comfortable with repos or planning agent contributors; local files for Claude Code use inside a directory the user controls.
 3. Guide creation concretely.
 
-   For a **sheet**: create a folder to hold the store, then inside it an `archive/` subfolder and three Sheets titled `config`, `meals`, and `log`. Head `config` with `key`, `value`, `note`, and the other two with their column names from the state model. Record the **folder's** id as `storage.location` — not any document's id, since documents are replaced and their ids change while the folder's does not.
+   For a **sheet**: establish the folder that will hold the store and an `archive/` subfolder inside it. Record the **folder's** id as `storage.location` — not any document's id, since documents are replaced and their ids change while the folder's does not. Do not create the three documents yet; they are created once they have content, at step 4.
 
-   Then collect contributors and share. Ask for the email address of every adult and of any household agent, explain that this is how they get access, and share the **folder** with each as an editor. Sharing the folder rather than the documents is what makes replacement writes safe: a newly created document inherits folder access automatically, so nobody loses access when a document is replaced. Sharing propagates to documents that already exist as well as ones created later, so the order does not matter.
+   Then collect contributors and arrange access. Ask for the email address of every adult and of any household agent, and explain that this is how they get access.
+
+   **Attempt the share, and expect it to fail when the household owns the folder.** If the folder belongs to a household member rather than to the account this skill is running as, Drive will refuse — an editor cannot grant access to a folder it does not own. That is the permission model working correctly, and it is the arrangement to prefer, because access to a family's data should require the owner rather than a service account.
+
+   When it fails, hand the user exact instructions instead: name the folder, the address, and the role (Editor). Then record the share as outstanding and carry it into step 4. **Never report setup complete with a member configured but not actually granted access** — that is precisely the failure the email requirement exists to prevent, and it is invisible from the inside.
+
+   Sharing the folder rather than the documents is what makes replacement writes safe: a newly created document inherits folder access automatically, so nobody loses access when a document is replaced. Sharing propagates to documents that already exist as well as to ones created later, so the order does not matter.
 
    For a **repo**: a new private repository under an account the household controls, deliberately separate from anyone's work or development accounts, shared with each contributor. For **local**: a directory path.
 
-4. Verify before proceeding: write a sentinel value to the store, read it back, and confirm out loud that read and write both work. If write fails (a read-only connector, missing permissions), say exactly what failed and what the user can change, and offer the paste-back mode for sheets. Never continue setup on unverified storage, because an interview whose answers cannot be saved is wasted goodwill.
+4. Verify before proceeding, using a **throwaway test document** rather than the real ones. Write it, read it back, confirm out loud that reading and writing both work, then delete it. Put a value containing a comma in it and leave one cell deliberately blank, so the check covers the two things most likely to corrupt a row rather than merely proving the connector answers at all.
+
+   Use a throwaway rather than creating the real documents empty. Creating them here and filling them in later means every document is written twice and archived once before the household has done anything, which is noise in a history whose whole purpose is recovering from real mistakes.
+
+   If writing fails (a read-only connector, missing permissions), say exactly what failed and what the user can change, and offer the paste-back mode for sheets. Never continue setup on unverified storage, because an interview whose answers cannot be saved is wasted goodwill.
 
 **Step 2: interview.** Cover the config fields that reflect a household choice, conversationally rather than as a form, explaining briefly why each answer matters (covered days set scope, acquisition sources shape the shopping lists). Reasonable defaults to offer: covered days of Monday through Wednesday for a first phase, dinner only, a repeat window of 21 days.
 
@@ -244,9 +258,21 @@ Do not interview for mechanical fields that have sound defaults and no household
 
 Ask where the household sits on the consistency dial, and explain the tradeoff in one sentence: high consistency runs the proven rotation and is often the right call for a new or limited-day plan; high variety works the repeat window hard. There is no correct answer, only a household preference.
 
-**Step 3: seed the meal library.** Ask for five to ten meals the household already makes and likes, with quick ratings, and explicitly ask which prepared or semi-prepared items are house staples (store rotisserie chicken, frozen dumplings, and the like), since users tend to omit these unless prompted, treating them as "not real meals" when they are often the most reliable rows in the library. A cold-start library makes the first plan session dramatically better because the interview can anchor on proven meals instead of guessing.
+**Step 3: seed the meal library — draft it for them first.** Do not ask the household to produce a list from nothing. Asking someone to name eight meals they cook is asking them to do the hardest kind of recall on the spot, and it is where a first-time setup stalls. Instead, build a proposed starter library from what they have already told you in the interview, show it to them, and ask them to correct it. Reacting to a concrete list is far easier than composing one, and the corrections come back specific: *we hate salmon, we do that with turkey instead, add the frozen dumplings.*
 
-**Step 4: write and confirm.** Write all three documents to the verified backend, and confirm to the user where their data lives, who can access it (name them), and that the skill itself stores nothing.
+Draft it from the interview's own material — the proteins and dishes they named, who eats what, the effort and health goals they stated, the stores they buy from, and the days they cover. A household that said "chicken tenders, ground turkey, broccoli sometimes works, kids are picky, needs to be easy" has given you enough to propose eight plausible rows. Keep the draft to five to ten meals, skewed to the effort level their cadence actually supports, and make several of them prepared or semi-prepared, because users omit those unprompted — they read as "not real meals" when they are often the most reliable rows in the library.
+
+Show the draft as a compact table and be direct about its status: this is a starting point assembled from what they said, not a claim about their kitchen. Ask them to strike what is wrong, fix what is close, and add what is missing. Invite the additions explicitly, since a draft can otherwise anchor them into accepting only what is on the page.
+
+**A drafted row is a proposal, not a record.** Nothing reaches the `meals` document until the household confirms it. Write only the rows they kept or corrected; drop the rest silently rather than parking them somewhere "just in case." And seed every confirmed row as new: `times_made` 0, `last_made` empty, and `rating` set only where the household actually stated one, `keep` where they were clearly enthusiastic and blank otherwise. Never invent a `times_made` count or a `last_made` date to make the library look established. Those two columns drive rotation and the repeat window, so fabricated history quietly corrupts every plan that follows — the skill would be avoiding repeats that never happened and calling meals proven that nobody has cooked. This is the one place where a plausible guess does real damage.
+
+**Let this step be deferred.** Even with a draft in front of them, users sometimes want to come back to it rather than settle the list on the spot. That is a reasonable instinct, so honor it: finish setup without the library, do not create an empty `meals` document, and record it as outstanding. Offer to keep the draft for the next session so the work is not lost. Say that the first plan session will be much better once the library exists, and that at a high consistency dial it matters more still, because there the library *is* the rotation. Then stop asking.
+
+**Step 4: write, then report honestly.** Write each document that has content to the verified backend — config always, log with just its column names since no week has happened yet, and meals only if the library was seeded. Creating a document with nothing in it buys nothing and costs an archived copy on the household's first day.
+
+Then confirm where their data lives, who can access it (name them), and that the skill itself stores nothing.
+
+**Say what is still outstanding, and who has to do it.** Setup rarely finishes completely on the first pass, and a report that only describes success leaves the user believing they are done when they are not. List each open item plainly — a share the household owner has to grant, a meal library not yet seeded — with the specific action and whose it is. An outstanding item named out loud gets handled; one quietly omitted becomes a puzzle weeks later, when the household has forgotten this conversation and only knows that something does not work.
 
 **Adding a contributor later.** When reconfigure adds an adult or agent, share the store with their address as part of that change. A member added to config but never granted access is the failure this is written to prevent: everything looks configured, and they silently cannot read a thing.
 

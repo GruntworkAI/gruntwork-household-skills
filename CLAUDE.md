@@ -18,7 +18,7 @@ Meals is one skill in one plugin. It could have had its own marketplace; it
 doesn't, deliberately.
 
 Strip the food out of `meal-plan/SKILL.md` and what remains is a household
-shared-state substrate: a storage-backend abstraction with sentinel-write
+shared-state substrate: a storage-backend abstraction with throwaway-write
 verification, an identity-at-the-storage-layer contributor model, config created
 at first run, and a planned-versus-actual log. None of that is about food. Any
 second household skill — chores, home maintenance, kid activities, budgeting —
@@ -80,11 +80,18 @@ docs/                              # reference docs (for users/deployers)
 - **Re-read before writing.** The state store is shared infrastructure. Every
   write re-reads the affected document first and reconciles rather than
   overwriting. Never silently delete another contributor's rows.
-- **Storage is verified before setup proceeds.** Write a sentinel, read it back,
+- **Storage is verified before setup proceeds.** Write a throwaway test document, read it back,
   and never continue an interview on unverified storage.
 
 ## Conventions
 
+- **No unexplained jargon in SKILL.md.** The skill's prose becomes what Claude
+  says to a household mid-conversation, so a term of art there reaches someone
+  who did not ask for it. "Sentinel" shipped in v0.4.3 and was caught in review:
+  it means nothing to a family setting up meal planning. Use plain words
+  ("throwaway test document"), or define the term in the same breath. This
+  applies to SKILL.md and both READMEs; CLAUDE.md and `.claude/work/` are
+  developer-facing and may use ordinary technical vocabulary.
 - snake_case across config keys and any Python (org convention).
 - README at root = the family entry point; each plugin's README = domain detail.
 - Skills are prose-only today. If helper scripts arrive, they go under the
@@ -168,4 +175,4 @@ change, never a specific household, meal, or state-store location.
 | **A version reappears in SKILL.md frontmatter** | `plugin.json` says 0.5.0, the skill's frontmatter says something else. | The skill was authored standalone in Claude Desktop and carried its own `metadata.version`; it was removed at scaffold time so `plugin.json` is the single owner. If a Desktop-authored revision reintroduces it, strip it on the way in rather than syncing it. |
 | **`local` backend can point inside this repo** | A household's `config.yaml` / `meals.csv` / `log.csv` appear in `git status`. | The `local` backend takes any directory path. Those filenames are gitignored defensively — if you see them staged, stop and move the state store out of the repo entirely. |
 | **Skill triggering on Desktop is unverified** | Skill doesn't fire on "what's for dinner" in the consumer app. | Whether Skills auto-trigger on the Desktop app is still an open question across the gruntwork plugins (same open item as the lastmilefirst plugin). Test explicitly on first Desktop install rather than assuming parity with Claude Code. |
-| **Sheet backend may be read-only** | Setup's sentinel write fails against a Google Sheet. | The available connector may read but not write. The skill has a specified degraded paste-back mode — confirm it works rather than assuming, since the sheet is the backend most households will choose. |
+| **Sheet backend may be read-only** | Setup's throwaway test write fails against a Google Sheet. | The available connector may read but not write. The skill has a specified degraded paste-back mode — confirm it works rather than assuming, since the sheet is the backend most households will choose. |
