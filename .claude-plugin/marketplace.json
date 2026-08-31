@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Marketplace for Claude skills that run a household: recurring domestic loops that plan, execute, and remember. Meals today; the family is built to grow.",
-    "version": "0.4.4"
+    "version": "0.4.5"
   },
   "plugins": [
     {
       "name": "gruntwork-meals",
       "description": "Run a household meal plan as a repeating loop: plan the covered days, acquire the food, cook the meals, and record what actually happened so next week's plan is smarter than this week's. Generic by construction — every household detail lives in that household's own state store.",
-      "version": "0.4.4",
+      "version": "0.4.5",
       "author": {
         "name": "GruntworkAI",
         "url": "https://github.com/GruntworkAI"
