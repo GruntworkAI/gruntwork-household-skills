@@ -196,10 +196,10 @@ The general shape is worth keeping: when a setting already has an authoritative
 home, surface it and confirm it rather than copying it somewhere the skill
 controls.
 
-### O6. The cold-start tiebreak is undefined, so the first plan is unreproducible — OPEN
+### O6. The cold-start tiebreak is undefined, so the first plan is unreproducible
 
 Found on 2026-08-30 running plan mode against a real store with an empty log.
-Not fixed.
+**Fixed in v0.4.6.**
 
 Plan mode at dial 5 says: use the most recent completed week's plan, and *"if no
 prior week exists, use the highest-rated keepers with the most `times_made`."*
@@ -216,16 +216,25 @@ This matters more than a normal ambiguity because it lands on the household's
 very first plan, which is the one that sets expectations, and because the
 sort key is guaranteed degenerate on that run rather than merely likely to be.
 
-**Proposed fix:** state the cold-start tiebreak. Protein spread across covered
-days is the strongest candidate — it is what a person actually does, and it
-reads as deliberate rather than arbitrary. Whatever is chosen, the skill should
-also say out loud that the first slate comes from stated preference rather than
-history, because at dial 5 the user has been told they are getting a proven
-rotation and on week one no such thing exists.
+**Fixed:** plan mode now has an explicit first-plan procedure — keepers first,
+then **protein spread across the covered days as the tiebreak**, then lower
+effort and at least one prepared row, and deliberately hold back a keeper so
+the second week has something to rotate in. The skill also now states plainly
+that a first slate comes from what the household said at setup rather than from
+anything cooked. That last part is not decoration: at dial 5 the user has been
+promised their proven rotation, and presenting inherited preferences as one
+quietly teaches them the log cannot be trusted.
 
-Related and smaller: the skill has no notion of planning happening off the
-planning day. This run happened on the shopping day, which meant the delivery
-needed to go in the same day — surfaced manually, not by the skill.
+Also fixed, the smaller half: plan mode checks today against the cadence and
+says so when planning happens off the planning day. This run happened *on* the
+shopping day, which meant the delivery had to go in the same day — noticed by
+hand, not by the skill. Planning after a covered day has already passed is the
+worse version, since the slate silently covers fewer nights than expected.
+
+The general shape, worth keeping: **a sort key that is degenerate by
+construction is not a tiebreak.** `times_made` is guaranteed 0 on every row of a
+freshly seeded library — the setup rules require it — so the ranking was never
+going to decide anything on the one run where it mattered most.
 
 ---
 
