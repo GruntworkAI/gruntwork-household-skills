@@ -196,6 +196,37 @@ The general shape is worth keeping: when a setting already has an authoritative
 home, surface it and confirm it rather than copying it somewhere the skill
 controls.
 
+### O6. The cold-start tiebreak is undefined, so the first plan is unreproducible — OPEN
+
+Found on 2026-08-30 running plan mode against a real store with an empty log.
+Not fixed.
+
+Plan mode at dial 5 says: use the most recent completed week's plan, and *"if no
+prior week exists, use the highest-rated keepers with the most `times_made`."*
+On a first run every row is `times_made` 0 by construction — the setup rules
+require it — so the sort is a four-way tie among the keepers and the skill has
+nothing left to say. Three slots, four equal candidates.
+
+The run filled the gap by spreading proteins across the week, on the reasoning
+that with only three covered nights two chicken dishes read as one meal twice.
+That is defensible and it is **nowhere in the skill**. Another run, or the same
+run tomorrow, could pick a different three and be equally compliant.
+
+This matters more than a normal ambiguity because it lands on the household's
+very first plan, which is the one that sets expectations, and because the
+sort key is guaranteed degenerate on that run rather than merely likely to be.
+
+**Proposed fix:** state the cold-start tiebreak. Protein spread across covered
+days is the strongest candidate — it is what a person actually does, and it
+reads as deliberate rather than arbitrary. Whatever is chosen, the skill should
+also say out loud that the first slate comes from stated preference rather than
+history, because at dial 5 the user has been told they are getting a proven
+rotation and on week one no such thing exists.
+
+Related and smaller: the skill has no notion of planning happening off the
+planning day. This run happened on the shopping day, which meant the delivery
+needed to go in the same day — surfaced manually, not by the skill.
+
 ---
 
 ## Not defects, recorded to prevent rediscovery
