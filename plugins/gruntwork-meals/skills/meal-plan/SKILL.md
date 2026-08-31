@@ -209,6 +209,14 @@ Preflight decides. If the runtime can read Drive but not create files, fall back
 
 A connector with true cell-level write (Google's own Sheets MCP server, for instance) can update in place and skip the replace-and-archive cycle entirely. It requires a cloud project and OAuth client, so treat it as an upgrade a household may choose, never a prerequisite.
 
+## Calendar
+
+`calendar.calendar_name` is resolved by listing the household's calendars and matching the name, never by a stored id — a name survives being re-shared, and an id the user cannot read means nothing when something goes wrong.
+
+**State the calendar's timezone when it is chosen, and again whenever it is reconfigured.** A calendar carries the timezone of the account that hosts it, which may be an agent account with no relationship to where the household actually eats. Assuming it matches is usually right and occasionally wrong, and when it is wrong it fails quietly: the events exist, the skill's own report looks correct, and only the calendar shows dinner three hours off. A defrost reminder at the wrong hour is worse than none.
+
+So say it plainly — *"that calendar is set to America/Los_Angeles, so meal events and the shopping block will land in Pacific time"* — and ask for confirmation. If it is wrong, do not correct it in config and do not store a timezone of your own: tell the user to change it on the calendar itself, in Google Calendar's settings for that calendar, because that is where the setting actually lives. A timezone copied into config becomes a second answer that drifts from the real one the first time anybody edits the calendar.
+
 ## Multiple contributors
 
 The state store is shared infrastructure, and more than one contributor may read and write it: two adults each running the skill from their own Claude, and potentially a household AI agent running it with credentials of its own. The skill does not authenticate anyone. Identity lives at the storage layer: each contributor reaches the backend with their own credentials (their Google account for a sheet, their GitHub account or a machine user for a repo), and access control is whatever the backend grants those credentials. This keeps the skill simple and makes an agent contributor structurally identical to a human one.
@@ -253,6 +261,8 @@ Run this when no config exists, or when the user asks to reconfigure. Storage co
    If writing fails (a read-only connector, missing permissions), say exactly what failed and what the user can change, and offer the paste-back mode for sheets. Never continue setup on unverified storage, because an interview whose answers cannot be saved is wasted goodwill.
 
 **Step 2: interview.** Cover the config fields that reflect a household choice, conversationally rather than as a form, explaining briefly why each answer matters (covered days set scope, acquisition sources shape the shopping lists). Reasonable defaults to offer: covered days of Monday through Wednesday for a first phase, dinner only, a repeat window of 21 days.
+
+When the household picks a calendar, confirm its timezone out loud as described under Calendar. It is one sentence, it is the only moment the mismatch is cheap to catch, and every calendar event the skill ever writes depends on the answer.
 
 Do not interview for mechanical fields that have sound defaults and no household opinion attached — `storage.archive_keep` and the `meta` stamps among them. Set them and move on. Every question spent on plumbing is one the user has to answer before reaching the part they came for.
 

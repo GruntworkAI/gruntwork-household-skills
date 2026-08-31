@@ -166,24 +166,35 @@ repeats that never happened and treating unmade meals as proven. The generic
 example file was deleted rather than kept alongside; two sources of truth for
 what a library looks like is one too many.
 
-### O5. Config has no timezone, and the calendar's timezone is not the household's — OPEN
+### O5. The calendar's timezone is never stated, so a mismatch fails silently
 
-Noticed while finishing setup on 2026-08-30, not yet fixed.
+Found while finishing setup on 2026-08-30. `list_calendars` reported the
+household calendar in `America/Los_Angeles` — the timezone of the *agent* account
+hosting it, which has no necessary relationship to where the family eats. Here
+they matched, which is precisely why it is worth fixing: it is right often enough
+to never get checked.
 
-`list_calendars` reports the household calendar in `America/Los_Angeles`, because
-a calendar carries the timezone of the account that hosts it — here the agent
-account, which has nothing to do with where the family eats dinner. Config
-records covered days and a shopping day but no timezone at all.
+A mismatch fails quietly. The events exist, the skill's own report reads correct,
+and only the calendar shows dinner shifted. A defrost reminder three hours off is
+worse than no reminder.
 
-If the two ever differ, every meal event and every shopping block lands at the
-wrong hour, and it fails quietly: the events exist, they look right in the
-skill's own report, and only the calendar shows them shifted. A defrost reminder
-three hours off is worse than no reminder.
+**The first proposed fix was wrong.** Adding `cadence.timezone` to config would
+have created a second answer to a question the calendar already answers, and it
+drifts the first time anyone edits the calendar. The user's correction:
 
-**Proposed fix:** add `cadence.timezone`, set it during the interview (inferred
-and confirmed, not asked cold), and write calendar events with it explicitly
-rather than inheriting the calendar default. Needs a decision on whether to
-verify the calendar's own timezone at setup and warn on a mismatch.
+> It's not crazy to assume the agent is on the same time zone as the principal,
+> but it isn't super safe. We should just note at calendar selection or
+> confirmation time what, exactly, the calendar's time zone is and confirm that
+> is good.
+
+**Fixed:** a new Calendar section states the timezone aloud when the calendar is
+chosen or reconfigured, and asks for confirmation. If it is wrong the user is
+sent to change it *on the calendar*, in Google Calendar's settings, because that
+is where the setting lives. Nothing about timezone is stored in config.
+
+The general shape is worth keeping: when a setting already has an authoritative
+home, surface it and confirm it rather than copying it somewhere the skill
+controls.
 
 ---
 
